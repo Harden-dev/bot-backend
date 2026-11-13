@@ -19,3 +19,13 @@ export {
   normalizeVendorNumber,
 } from './phone/normalize-phone.js';
 export { INVALID_ID_MESSAGE, ParseIdPipe } from './pipes/parse-id.pipe.js';
+export {
+  computeTotal,
+  INVALID_TOTAL_MESSAGE,
+  MAX_ORDER_TOTAL,
+  ORDER_TOTAL_EXCEEDED_MESSAGE,
+  OrderTotalExceededError,
+} from './money/compute-total.js';
+export type { PricedItem } from './money/compute-total.js';
+export { INVALID_PERIOD_MESSAGE, toDayRange } from './period/day-range.js';
+export type { DayRange } from './period/day-range.js';

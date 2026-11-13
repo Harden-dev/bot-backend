@@ -4,7 +4,7 @@ import request from 'supertest';
 import { PrismaService } from '../src/prisma/index.js';
 import {
   createApp,
-  seedAdminAndLogin,
+  seedAdminWithToken,
   TEST_ADMIN,
 } from './helpers/create-app.js';
 import { resetDb } from './helpers/reset-db.js';
@@ -40,7 +40,7 @@ describe('Auth (e2e)', () => {
 
   beforeEach(async () => {
     await resetDb(prisma);
-    token = await seedAdminAndLogin(app);
+    token = await seedAdminWithToken(app);
   });
 
   afterAll(async () => {

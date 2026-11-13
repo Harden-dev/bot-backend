@@ -2,7 +2,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/index.js';
 import { VendorsService } from '../src/vendors/index.js';
-import { createApp, seedAdminAndLogin } from './helpers/create-app.js';
+import { createApp, seedAdminWithToken } from './helpers/create-app.js';
 import { resetDb } from './helpers/reset-db.js';
 
 interface VendorBody {
@@ -41,7 +41,7 @@ describe('Vendors (e2e)', () => {
 
   beforeEach(async () => {
     await resetDb(prisma);
-    token = await seedAdminAndLogin(app);
+    token = await seedAdminWithToken(app);
   });
 
   afterAll(async () => {

@@ -10,6 +10,7 @@ import {
 } from './common/index.js';
 import { AppConfigModule, type Env } from './config/index.js';
 import { HealthModule } from './health/index.js';
+import { OrdersModule } from './orders/index.js';
 import { PrismaModule } from './prisma/index.js';
 import { VendorsModule } from './vendors/index.js';
 
@@ -26,6 +27,7 @@ import { VendorsModule } from './vendors/index.js';
     HealthModule,
     AuthModule,
     VendorsModule,
+    OrdersModule,
   ],
   providers: [
     {
