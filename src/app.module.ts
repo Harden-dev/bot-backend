@@ -13,6 +13,8 @@ import { AppConfigModule, type Env } from './config/index.js';
 import { HealthModule } from './health/index.js';
 import { OrdersModule } from './orders/index.js';
 import { PrismaModule } from './prisma/index.js';
+import { ReceiptsModule } from './receipts/index.js';
+import { StatsModule } from './stats/index.js';
 import { VendorsModule } from './vendors/index.js';
 import { WhatsappModule } from './whatsapp/index.js';
 
@@ -32,6 +34,8 @@ import { WhatsappModule } from './whatsapp/index.js';
     VendorsModule,
     OrdersModule,
     WhatsappModule,
+    ReceiptsModule,
+    StatsModule,
   ],
   providers: [
     {

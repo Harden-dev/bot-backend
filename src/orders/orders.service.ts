@@ -251,6 +251,25 @@ export class OrdersService {
   }
 
   /**
+   * Détails de plusieurs commandes, dans l'ordre des identifiants reçus
+   * (doublons conservés) ; `404` si l'une d'elles n'existe pas.
+   */
+  async findDetails(ids: readonly bigint[]): Promise<OrderDetailDto[]> {
+    const orders = await this.prisma.order.findMany({
+      where: { id: { in: [...new Set(ids)] } },
+      include: DETAIL_INCLUDE,
+    });
+    const byId = new Map(orders.map((order) => [order.id, order]));
+    return ids.map((id) => {
+      const order = byId.get(id);
+      if (!order) {
+        throw new NotFoundException(ORDER_NOT_FOUND_MESSAGE);
+      }
+      return toOrderDetail(order);
+    });
+  }
+
+  /**
    * Correction admin (US-CMD-05) : seulement en `non_traitee` ou `validee`,
    * sinon `409` (PO-14). `items` remplace tous les articles et recalcule le
    * total. Non tracée dans l'historique.

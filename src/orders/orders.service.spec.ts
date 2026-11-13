@@ -443,6 +443,30 @@ describe('OrdersService', () => {
     });
   });
 
+  describe('findDetails', () => {
+    const other = { ...ORDER, id: 3n, reference: 'CMD-20261110-001' };
+
+    it("renvoie les détails dans l'ordre des identifiants reçus, en une requête", async () => {
+      order.findMany.mockResolvedValue([other, ORDER]);
+
+      const details = await service.findDetails([7n, 3n, 7n]);
+
+      expect(details.map((detail) => detail.id)).toEqual([7, 3, 7]);
+      expect(order.findMany).toHaveBeenCalledTimes(1);
+      expect(order.findMany.mock.calls[0][0]).toMatchObject({
+        where: { id: { in: [7n, 3n] } },
+      });
+    });
+
+    it('répond 404 si une commande est inconnue', async () => {
+      order.findMany.mockResolvedValue([ORDER]);
+
+      await expect(service.findDetails([7n, 99n])).rejects.toThrow(
+        new NotFoundException(ORDER_NOT_FOUND_MESSAGE),
+      );
+    });
+  });
+
   describe('update', () => {
     beforeEach(() => {
       order.findUnique.mockResolvedValue(ORDER);
