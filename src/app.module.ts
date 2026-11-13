@@ -1,6 +1,7 @@
 import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/index.js';
 import {
@@ -13,6 +14,7 @@ import { HealthModule } from './health/index.js';
 import { OrdersModule } from './orders/index.js';
 import { PrismaModule } from './prisma/index.js';
 import { VendorsModule } from './vendors/index.js';
+import { WhatsappModule } from './whatsapp/index.js';
 
 @Module({
   imports: [
@@ -23,11 +25,13 @@ import { VendorsModule } from './vendors/index.js';
         pinoHttp: buildPinoHttpOptions(config.get('NODE_ENV', { infer: true })),
       }),
     }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     HealthModule,
     AuthModule,
     VendorsModule,
     OrdersModule,
+    WhatsappModule,
   ],
   providers: [
     {

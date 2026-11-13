@@ -1,5 +1,13 @@
 export { CurrentUser } from './decorators/current-user.decorator.js';
 export { IS_PUBLIC_KEY, Public } from './decorators/public.decorator.js';
+export {
+  describeError,
+  isPrismaKnownError,
+  isUniqueViolation,
+  PRISMA_RECORD_NOT_FOUND,
+  PRISMA_UNIQUE_VIOLATION,
+} from './errors/prisma-error.js';
+export type { PrismaKnownError } from './errors/prisma-error.js';
 export { AllExceptionsFilter } from './filters/all-exceptions.filter.js';
 export {
   AUTH_REQUIRED_MESSAGE,

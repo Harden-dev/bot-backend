@@ -1,16 +1,21 @@
 import { JwtService } from '@nestjs/jwt';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import { hash } from 'argon2';
 import { AppModule } from '../../src/app.module.js';
 import { configureApp } from '../../src/app.setup.js';
 import { PrismaService } from '../../src/prisma/index.js';
 
-/** Application Nest complète, configurée comme `main.ts`. */
-export async function createApp(): Promise<NestExpressApplication> {
-  const moduleRef = await Test.createTestingModule({
-    imports: [AppModule],
-  }).compile();
+/**
+ * Application Nest complète, configurée comme `main.ts`. `override` permet
+ * de remplacer des providers (ex. `WhatsappClient`, toujours simulé).
+ */
+export async function createApp(
+  override: (builder: TestingModuleBuilder) => TestingModuleBuilder = (b) => b,
+): Promise<NestExpressApplication> {
+  const moduleRef = await override(
+    Test.createTestingModule({ imports: [AppModule] }),
+  ).compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>({
     rawBody: true,
   });
