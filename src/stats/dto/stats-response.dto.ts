@@ -28,6 +28,7 @@ export class StatsOverviewDto extends StatsPeriodDto {
 
   @ApiProperty({
     example: 80,
+    type: Number,
     nullable: true,
     description: '% livree ÷ (livree + echec) ; null si aucune',
   })
@@ -35,6 +36,7 @@ export class StatsOverviewDto extends StatsPeriodDto {
 
   @ApiProperty({
     example: 20,
+    type: Number,
     nullable: true,
     description: '% echec ÷ (livree + echec) ; null si aucune',
   })
@@ -42,6 +44,7 @@ export class StatsOverviewDto extends StatsPeriodDto {
 
   @ApiProperty({
     example: 2.5,
+    type: Number,
     nullable: true,
     description: 'Heures jusqu’à la première entrée validee ; null si aucune',
   })

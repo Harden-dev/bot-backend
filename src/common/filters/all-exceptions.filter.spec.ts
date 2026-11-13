@@ -10,6 +10,7 @@ import {
   AllExceptionsFilter,
   CONFLICT_MESSAGE,
   INTERNAL_ERROR_MESSAGE,
+  INVALID_JSON_MESSAGE,
   NOT_FOUND_MESSAGE,
 } from './all-exceptions.filter.js';
 
@@ -54,6 +55,23 @@ describe('AllExceptionsFilter', () => {
       400,
     );
     expect(logError).not.toHaveBeenCalled();
+  });
+
+  it('remplace le message de l’analyseur JSON par un message générique (I-04)', () => {
+    const parseError = new SyntaxError(
+      `Unexpected token 'a', "${CUSTOMER_DATA}" is not valid JSON`,
+    );
+    filter.catch(
+      new BadRequestException(parseError.message, { cause: parseError }),
+      host,
+    );
+
+    expect(reply).toHaveBeenCalledWith(
+      response,
+      { statusCode: 400, message: INVALID_JSON_MESSAGE, error: 'Bad Request' },
+      400,
+    );
+    expect(JSON.stringify(reply.mock.calls)).not.toContain(CUSTOMER_DATA);
   });
 
   it.each([

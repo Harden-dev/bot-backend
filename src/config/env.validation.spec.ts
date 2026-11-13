@@ -107,6 +107,33 @@ describe('envValidationSchema : CORS_ORIGIN', () => {
   );
 });
 
+describe('envValidationSchema : CORS_ORIGIN en production (B-06)', () => {
+  const production = { ...VALID_ENV, NODE_ENV: 'production' };
+
+  it('exige https://', () => {
+    const { error } = validate({
+      ...production,
+      CORS_ORIGIN: 'http://admin.example.com',
+    });
+
+    expect(error?.message).toContain('CORS_ORIGIN');
+  });
+
+  it('accepte une origine https://', () => {
+    expect(
+      validate({ ...production, CORS_ORIGIN: 'https://admin.example.com' })
+        .error,
+    ).toBeUndefined();
+  });
+
+  it('refuse toujours un chemin après l’origine', () => {
+    expect(
+      validate({ ...production, CORS_ORIGIN: 'https://admin.example.com/' })
+        .error,
+    ).toBeDefined();
+  });
+});
+
 describe('ConfigModule avec le schéma Joi', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -130,24 +157,32 @@ describe('ConfigModule avec le schéma Joi', () => {
     ).rejects.toThrow(/"JWT_SECRET" is required/);
   });
 
-  it('injecte ConfigService typé par le constructeur (V-1)', async () => {
-    for (const [key, value] of Object.entries(VALID_ENV))
-      vi.stubEnv(key, value);
-    vi.stubEnv('PORT', undefined);
+  // Premier module Nest compilé du fichier : démarrage à froid, parfois plus
+  // de 5 s sous charge (suite complète en parallèle).
+  it(
+    'injecte ConfigService typé par le constructeur (V-1)',
+    { timeout: 20_000 },
+    async () => {
+      for (const [key, value] of Object.entries(VALID_ENV))
+        vi.stubEnv(key, value);
+      vi.stubEnv('PORT', undefined);
 
-    const moduleRef = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({
-          ignoreEnvFile: true,
-          validationSchema: envValidationSchema,
-        }),
-      ],
-      providers: [ConfigConsumer],
-    }).compile();
+      const moduleRef = await Test.createTestingModule({
+        imports: [
+          ConfigModule.forRoot({
+            ignoreEnvFile: true,
+            validationSchema: envValidationSchema,
+          }),
+        ],
+        providers: [ConfigConsumer],
+      }).compile();
 
-    const consumer = moduleRef.get(ConfigConsumer);
-    expect(consumer.config).toBeInstanceOf(ConfigService);
-    expect(consumer.config.get('PORT', { infer: true })).toBe(3000);
-    expect(consumer.config.get('DRAFT_TTL_MINUTES', { infer: true })).toBe(30);
-  });
+      const consumer = moduleRef.get(ConfigConsumer);
+      expect(consumer.config).toBeInstanceOf(ConfigService);
+      expect(consumer.config.get('PORT', { infer: true })).toBe(3000);
+      expect(consumer.config.get('DRAFT_TTL_MINUTES', { infer: true })).toBe(
+        30,
+      );
+    },
+  );
 });

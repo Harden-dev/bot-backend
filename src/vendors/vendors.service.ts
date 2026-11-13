@@ -3,8 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { normalizeVendorNumber } from '../common/index.js';
-import { Prisma, type Vendor } from '../generated/prisma/client.js';
+import {
+  isPrismaKnownError,
+  normalizeVendorNumber,
+  PRISMA_RECORD_NOT_FOUND,
+  PRISMA_UNIQUE_VIOLATION,
+} from '../common/index.js';
+import type { Vendor } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/index.js';
 import type { CreateVendorDto } from './dto/create-vendor.dto.js';
 import type { UpdateVendorDto } from './dto/update-vendor.dto.js';
@@ -17,12 +22,9 @@ export const DUPLICATE_VENDOR_NUMBER_MESSAGE =
   'Ce numéro WhatsApp est déjà attribué à un vendeur';
 export const VENDOR_NOT_FOUND_MESSAGE = 'Vendeur introuvable';
 
-const PRISMA_UNIQUE_VIOLATION = 'P2002';
-const PRISMA_RECORD_NOT_FOUND = 'P2025';
-
 /** Traduit les erreurs Prisma attendues d'une écriture sur `vendors`. */
 function toVendorWriteError(error: unknown): unknown {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+  if (!isPrismaKnownError(error)) {
     return error;
   }
   if (error.code === PRISMA_UNIQUE_VIOLATION) {

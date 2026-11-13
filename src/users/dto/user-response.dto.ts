@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import type { User, UserRole } from '../../generated/prisma/client.js';
+import { type User, UserRole } from '../../generated/prisma/client.js';
 import { toNumberId } from '../../prisma/index.js';
 
 /** Utilisateur renvoyé par l'API, sans le hachage du mot de passe. */
@@ -13,7 +13,7 @@ export class UserResponseDto {
   @ApiProperty({ example: 'Administrateur' })
   name: string;
 
-  @ApiProperty({ example: 'admin' })
+  @ApiProperty({ enum: UserRole })
   role: UserRole;
 }
 

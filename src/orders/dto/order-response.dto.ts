@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { type PageResponse, PageMetaDto } from '../../common/index.js';
 import type {
   Order,
   OrderItem,
@@ -75,21 +76,31 @@ export class OrderHistoryDto {
   toStatus: OrderStatus;
 
   @ApiProperty({
+    type: Number,
     nullable: true,
     description: 'null : création par le bot',
   })
   changedByUserId: number | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ type: String, nullable: true })
   comment: string | null;
 
   @ApiProperty()
   changedAt: Date;
 }
 
+/** Réponse paginée de `GET /orders` (Swagger). */
+export class OrderPageDto implements PageResponse<OrderSummaryDto> {
+  @ApiProperty({ type: [OrderSummaryDto] })
+  data: OrderSummaryDto[];
+
+  @ApiProperty({ type: PageMetaDto })
+  meta: PageMetaDto;
+}
+
 /** Détail `GET /orders/:id` : articles, vendeur et historique des statuts. */
 export class OrderDetailDto extends OrderSummaryDto {
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ type: String, nullable: true })
   notes: string | null;
 
   @ApiProperty({ type: [OrderItemResponseDto] })

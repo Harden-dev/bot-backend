@@ -18,6 +18,7 @@ export {
 export { buildPinoHttpOptions } from './logger/pino-http-options.js';
 export { paginate, toSkipTake } from './pagination/paginate.js';
 export type { PageMeta, PageResponse } from './pagination/paginate.js';
+export { PageMetaDto } from './pagination/page-meta.dto.js';
 export {
   MAX_LIMIT,
   PaginationQueryDto,
@@ -41,3 +42,5 @@ export { formatThousands, formatXof } from './money/format-xof.js';
 export { INVALID_PERIOD_MESSAGE, toDayRange } from './period/day-range.js';
 export type { DayRange } from './period/day-range.js';
 export { foldCase, normalizeForMatch } from './text/normalize-for-match.js';
+export { ApiAdminAuth } from './swagger/api-admin-auth.decorator.js';
+export { ErrorResponseDto } from './swagger/error-response.dto.js';

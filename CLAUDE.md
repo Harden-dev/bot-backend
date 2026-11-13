@@ -43,7 +43,7 @@ Import the Prisma client from `src/generated/prisma`, not `@prisma/client`. `Pri
 
 The DAT was written against an older stack; the actual scaffold differs and the scaffold wins:
 
-- **Vitest, not Jest** (globals enabled, `vite-tsconfig-paths` for aliases). Use `vi.fn()` / `vi.mock()`.
+- **Vitest, not Jest** (globals enabled, native `resolve.tsconfigPaths` for aliases). Use `vi.fn()` / `vi.mock()`.
 - **NestJS 12, TypeScript 6, ESM** (`"type": "module"`, `module: nodenext`). Relative imports **must** use the `.js` extension (`import { X } from './x.js'`). `main.ts` uses top-level `await`.
 - **pnpm** instead of npm; **oxlint** instead of ESLint.
 

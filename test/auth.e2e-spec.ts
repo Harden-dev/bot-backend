@@ -32,6 +32,10 @@ describe('Auth (e2e)', () => {
   let app: NestExpressApplication;
   let prisma: PrismaService;
   let token: string;
+  // IP distincte par test : la connexion est limitée à 5 appels par minute et
+  // par IP (voir throttler.e2e-spec.ts).
+  let clientIp: string;
+  let ipSuffix = 0;
 
   beforeAll(async () => {
     app = await createApp();
@@ -39,6 +43,8 @@ describe('Auth (e2e)', () => {
   });
 
   beforeEach(async () => {
+    ipSuffix += 1;
+    clientIp = `198.51.100.${ipSuffix}`;
     await resetDb(prisma);
     token = await seedAdminWithToken(app);
   });
@@ -51,6 +57,7 @@ describe('Auth (e2e)', () => {
     it('renvoie { accessToken, user } avec un JWT HS256 valable 8 h', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
+        .set('X-Forwarded-For', clientIp)
         .send({ email: TEST_ADMIN.email, password: TEST_ADMIN.password })
         .expect(200);
 
@@ -82,6 +89,7 @@ describe('Auth (e2e)', () => {
       async (_, email, password) => {
         await request(app.getHttpServer())
           .post('/api/v1/auth/login')
+          .set('X-Forwarded-For', clientIp)
           .send({ email, password })
           .expect(401, INVALID_CREDENTIALS);
       },
@@ -92,6 +100,7 @@ describe('Auth (e2e)', () => {
 
       await request(app.getHttpServer())
         .post('/api/v1/auth/login')
+        .set('X-Forwarded-For', clientIp)
         .send({ email: TEST_ADMIN.email, password: TEST_ADMIN.password })
         .expect(401, INVALID_CREDENTIALS);
     });
@@ -99,6 +108,7 @@ describe('Auth (e2e)', () => {
     it('refuse un corps invalide en 400', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
+        .set('X-Forwarded-For', clientIp)
         .send({ email: 'pas-un-email', password: '' })
         .expect(400);
 
@@ -190,6 +200,34 @@ describe('Auth (e2e)', () => {
       await request(app.getHttpServer())
         .get('/api/v1/auth/me')
         .set('Authorization', `Bearer ${expired}`)
+        .expect(401, UNAUTHORIZED);
+    });
+
+    it('répond 401 avec un jeton signé par la bonne clé mais sans exp (B-01)', async () => {
+      const withoutExp = await new JwtService({
+        secret: process.env['JWT_SECRET'],
+      }).signAsync({ sub: decodePayload(token)['sub'] });
+      expect(decodePayload(withoutExp)).not.toHaveProperty('exp');
+
+      await request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${withoutExp}`)
+        .expect(401, UNAUTHORIZED);
+    });
+
+    it('répond 401 avec un jeton émis il y a plus de JWT_EXPIRES_IN, même avec un exp futur (B-01)', async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const tooOld = await new JwtService({
+        secret: process.env['JWT_SECRET'],
+      }).signAsync({
+        sub: decodePayload(token)['sub'],
+        iat: now - EIGHT_HOURS_IN_SECONDS - 60,
+        exp: now + 3600,
+      });
+
+      await request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${tooOld}`)
         .expect(401, UNAUTHORIZED);
     });
 

@@ -310,6 +310,8 @@ describe('Orders (e2e)', () => {
     it.each([
       'limit=101',
       'page=0',
+      'page=10001',
+      'page=999999999999999999999',
       'status=inconnu',
       'vendorId=0',
       'from=2026-02-30',

@@ -1,6 +1,7 @@
 import { STATUS_CODES } from 'node:http';
 import {
   type ArgumentsHost,
+  BadRequestException,
   Catch,
   ConflictException,
   type ExceptionFilter,
@@ -20,6 +21,8 @@ import {
 export const INTERNAL_ERROR_MESSAGE = 'Erreur interne';
 export const CONFLICT_MESSAGE = 'Cette ressource existe déjà';
 export const NOT_FOUND_MESSAGE = 'Ressource introuvable';
+/** Remplace le message de l'analyseur JSON, qui cite un extrait du corps (I-04). */
+export const INVALID_JSON_MESSAGE = 'Corps de requête JSON invalide';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -45,7 +48,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   private toHttpException(exception: unknown): HttpException {
     if (exception instanceof HttpException) {
-      return exception;
+      return exception.cause instanceof SyntaxError
+        ? new BadRequestException(INVALID_JSON_MESSAGE)
+        : exception;
     }
     if (isPrismaKnownError(exception)) {
       if (exception.code === PRISMA_UNIQUE_VIOLATION) {

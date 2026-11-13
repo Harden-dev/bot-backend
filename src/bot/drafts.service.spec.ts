@@ -355,6 +355,7 @@ describe('readDraftPayload', () => {
     ['un article invalide', { ...ORDER, items: [{ label: 'x' }] }],
     ['une référence non textuelle', { ...ORDER, orderReference: 3 }],
     ['un total absent', { ...ORDER, total: undefined }],
+    ['un JSON illisible (sans lever d’erreur)', '{"customerPhone":"0707'],
   ])('refuse %s', (_label, value) => {
     expect(readDraftPayload(value)).toBeNull();
   });

@@ -4,8 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/index.js';
 import { MessageProcessor } from './message-processor.js';
+import { UNSIGNED_LOG_LIMIT_PER_MINUTE } from './unsigned-log-budget.js';
 import {
-  MAX_UNSIGNED_LOG_BYTES,
   toLoggedPayload,
   UNSIGNED_LOG_PREVIEW_BYTES,
   WebhookService,
@@ -21,6 +21,11 @@ const PAYLOAD = { entry: [] };
 const RAW = Buffer.from(JSON.stringify(PAYLOAD));
 const SIGNATURE = `sha256=${createHmac('sha256', APP_SECRET).update(RAW).digest('hex')}`;
 const FORGED = SIGNATURE.replace(/.$/, (c) => (c === '0' ? '1' : '0'));
+const UNSIGNED_LOG = {
+  unsigned: true,
+  size: RAW.length,
+  preview: RAW.toString(),
+};
 
 describe('WebhookService', () => {
   const webhookLog = { create: vi.fn() };
@@ -127,20 +132,63 @@ describe('WebhookService', () => {
         ).rejects.toBeInstanceOf(ForbiddenException);
 
         expect(webhookLog.create).toHaveBeenCalledWith({
-          data: { signatureValid: false, payload: PAYLOAD },
+          data: { signatureValid: false, payload: UNSIGNED_LOG },
         });
         expect(processor.process).not.toHaveBeenCalled();
       },
     );
 
-    it('journalise un corps absent sous forme d’objet vide', async () => {
+    it('journalise un corps absent comme {} (aperçu)', async () => {
       await expect(
         service.receive(undefined, undefined, undefined),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
       expect(webhookLog.create).toHaveBeenCalledWith({
-        data: { signatureValid: false, payload: {} },
+        data: {
+          signatureValid: false,
+          payload: { unsigned: true, size: 2, preview: '{}' },
+        },
       });
+    });
+
+    it('n’écrit plus rien au-delà du plafond de POST non signés par minute, mais refuse toujours en 403', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-13T10:00:00Z'));
+      const warnLog = logs[2];
+      for (let i = 0; i < UNSIGNED_LOG_LIMIT_PER_MINUTE + 5; i += 1) {
+        await expect(
+          service.receive(RAW, FORGED, PAYLOAD),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+      }
+      expect(webhookLog.create).toHaveBeenCalledTimes(
+        UNSIGNED_LOG_LIMIT_PER_MINUTE,
+      );
+
+      vi.setSystemTime(new Date('2026-11-13T10:01:00Z'));
+      await expect(
+        service.receive(RAW, FORGED, PAYLOAD),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await service.receive(RAW, SIGNATURE, PAYLOAD);
+
+      expect(webhookLog.create).toHaveBeenCalledTimes(
+        UNSIGNED_LOG_LIMIT_PER_MINUTE + 2,
+      );
+      const warned = warnLog.mock.calls.flat().join('\n');
+      expect(warned).toContain('Plafond de 60 requêtes');
+      expect(warned).toContain(
+        '5 requête(s) webhook non signée(s) non journalisée(s)',
+      );
+      vi.useRealTimers();
+    });
+
+    it('ne plafonne pas les POST signés', async () => {
+      for (let i = 0; i < UNSIGNED_LOG_LIMIT_PER_MINUTE + 5; i += 1) {
+        await service.receive(RAW, SIGNATURE, PAYLOAD);
+      }
+
+      expect(webhookLog.create).toHaveBeenCalledTimes(
+        UNSIGNED_LOG_LIMIT_PER_MINUTE + 5,
+      );
     });
 
     it('n’attend pas le traitement et n’en remonte pas l’échec', async () => {
@@ -164,42 +212,56 @@ describe('WebhookService', () => {
 });
 
 describe('toLoggedPayload', () => {
-  const big = { data: 'x'.repeat(MAX_UNSIGNED_LOG_BYTES) };
+  const big = { data: 'x'.repeat(10_000) };
   const bigRaw = Buffer.from(JSON.stringify(big));
 
   it('garde tel quel un payload signé, même volumineux', () => {
     expect(toLoggedPayload(big, bigRaw, true)).toBe(big);
   });
 
-  it('garde tel quel un payload non signé de 4 ko au plus', () => {
-    const payload = { data: 'x'.repeat(MAX_UNSIGNED_LOG_BYTES - 20) };
-    const raw = Buffer.from(JSON.stringify(payload));
-    expect(raw.length).toBeLessThanOrEqual(MAX_UNSIGNED_LOG_BYTES);
-
-    expect(toLoggedPayload(payload, raw, false)).toBe(payload);
-  });
-
-  it('tronque un payload non signé de plus de 4 ko en JSON valide', () => {
+  it('ne garde d’un payload non signé que sa taille et un aperçu de 256 octets', () => {
     const logged = toLoggedPayload(big, bigRaw, false);
 
     expect(logged).toEqual({
-      truncated: true,
+      unsigned: true,
       size: bigRaw.length,
       preview: bigRaw.subarray(0, UNSIGNED_LOG_PREVIEW_BYTES).toString('utf8'),
     });
-    expect(Buffer.byteLength(JSON.stringify(logged))).toBeLessThanOrEqual(
-      MAX_UNSIGNED_LOG_BYTES,
+  });
+
+  it('garde un petit payload non signé en aperçu, sans son contenu analysé', () => {
+    expect(toLoggedPayload(PAYLOAD, RAW, false)).toEqual({
+      unsigned: true,
+      size: RAW.length,
+      preview: RAW.toString(),
+    });
+  });
+
+  it('ne coupe pas un caractère multi-octets en fin d’aperçu', () => {
+    const raw = Buffer.from(`"${'é'.repeat(200)}"`);
+    const { preview } = toLoggedPayload('x', raw, false) as { preview: string };
+
+    expect(Buffer.byteLength(preview)).toBeLessThanOrEqual(
+      UNSIGNED_LOG_PREVIEW_BYTES,
     );
+    expect(preview).not.toContain('\uFFFD');
+    expect(preview).toBe(`"${'é'.repeat(127)}`);
+  });
+
+  it('aplatit un JSON très imbriqué (aucune profondeur conservée)', () => {
+    const raw = Buffer.from('['.repeat(150) + ']'.repeat(150));
+
+    expect(toLoggedPayload(JSON.parse(raw.toString()), raw, false)).toEqual({
+      unsigned: true,
+      size: 300,
+      preview: '['.repeat(150) + ']'.repeat(106),
+    });
   });
 
   it('mesure le payload analysé quand le corps brut manque', () => {
     expect(toLoggedPayload(big, undefined, false)).toMatchObject({
-      truncated: true,
+      unsigned: true,
       size: bigRaw.length,
     });
-  });
-
-  it('journalise {} pour un corps absent ou non lu', () => {
-    expect(toLoggedPayload(undefined, undefined, false)).toEqual({});
   });
 });

@@ -52,9 +52,22 @@ function isItem(value: unknown): value is ParsedItem {
   );
 }
 
+/**
+ * JSON illisible : `null`, sans laisser remonter la `SyntaxError`, dont le
+ * message cite un extrait du texte (nom et téléphone du client) et finirait
+ * dans les logs du processor.
+ */
+function parseJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 /** Lit le payload JSON d'un brouillon (objet, ou chaîne selon le pilote). */
 export function readDraftPayload(raw: unknown): DraftPayload | null {
-  const value: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  const value: unknown = typeof raw === 'string' ? parseJson(raw) : raw;
   if (
     !isObject(value) ||
     typeof value['customerName'] !== 'string' ||

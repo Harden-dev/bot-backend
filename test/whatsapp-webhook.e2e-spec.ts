@@ -115,6 +115,7 @@ describe('Webhook WhatsApp (e2e)', () => {
 
       expect(res.text).toBe('1158201444');
       expect(res.headers['content-type']).toMatch(/^text\/plain/);
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
       await expect(prisma.webhookLog.count()).resolves.toBe(0);
     });
 
@@ -141,8 +142,15 @@ describe('Webhook WhatsApp (e2e)', () => {
         () => ({ 'hub.mode': 'subscribe', 'hub.verify_token': verifyToken }),
       ],
       ['aucun paramètre', () => ({})],
-    ])('refuse en 403 %s', async (_label, query) => {
-      await api().get(WEBHOOK).query(query()).expect(403);
+    ])('refuse en 403 %s, en JSON (I-03)', async (_label, query) => {
+      const res = await api().get(WEBHOOK).query(query()).expect(403, {
+        statusCode: 403,
+        message: 'Vérification du webhook refusée',
+        error: 'Forbidden',
+      });
+
+      expect(res.headers['content-type']).toMatch(/^application\/json/);
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
     });
   });
 
@@ -184,14 +192,21 @@ describe('Webhook WhatsApp (e2e)', () => {
       await processed();
     });
 
-    it('refuse un POST non signé : 403, signature_valid = 0, aucun traitement', async () => {
-      const payload = textPayload('wamid.B1');
+    it('refuse un POST non signé : 403, signature_valid = 0, aperçu seul, aucun traitement', async () => {
+      const body = JSON.stringify(textPayload('wamid.B1'));
 
-      await post(JSON.stringify(payload)).expect(403);
+      await post(body).expect(403);
 
       const logs = await prisma.webhookLog.findMany();
       expect(logs).toEqual([
-        expect.objectContaining({ signatureValid: false, payload }),
+        expect.objectContaining({
+          signatureValid: false,
+          payload: {
+            unsigned: true,
+            size: Buffer.byteLength(body),
+            preview: body.slice(0, 256),
+          },
+        }),
       ]);
       expect(processSpy).not.toHaveBeenCalled();
       await expect(prisma.processedMessage.count()).resolves.toBe(0);
@@ -227,7 +242,7 @@ describe('Webhook WhatsApp (e2e)', () => {
       await post(body, 'sha256=abc').expect(403);
     });
 
-    it('refuse un POST signé en text/plain : 403, journalisé avec {}', async () => {
+    it('refuse un POST signé en text/plain : 403, corps non lu journalisé comme {}', async () => {
       const body = JSON.stringify(textPayload('wamid.T1'));
 
       await api()
@@ -239,24 +254,27 @@ describe('Webhook WhatsApp (e2e)', () => {
 
       const logs = await prisma.webhookLog.findMany();
       expect(logs).toEqual([
-        expect.objectContaining({ signatureValid: false, payload: {} }),
+        expect.objectContaining({
+          signatureValid: false,
+          payload: { unsigned: true, size: 2, preview: '{}' },
+        }),
       ]);
       expect(processSpy).not.toHaveBeenCalled();
     });
 
-    it('tronque à 4 ko le payload journalisé d’un POST non signé', async () => {
+    it('ne garde d’un gros POST non signé qu’un aperçu de 256 octets', async () => {
       const body = JSON.stringify({ data: 'x'.repeat(10_000) });
 
       await post(body).expect(403);
 
       const [log] = await prisma.webhookLog.findMany();
-      expect(log.payload).toMatchObject({
-        truncated: true,
+      const logged = log.payload as { preview: string };
+      expect(logged).toEqual({
+        unsigned: true,
         size: Buffer.byteLength(body),
+        preview: body.slice(0, 256),
       });
-      expect(
-        Buffer.byteLength(JSON.stringify(log.payload)),
-      ).toBeLessThanOrEqual(4096);
+      expect(Buffer.byteLength(logged.preview)).toBeLessThanOrEqual(256);
     });
 
     it('ne traite qu’une fois un même wamid reçu deux fois simultanément', async () => {
@@ -354,7 +372,11 @@ describe('Webhook WhatsApp (e2e)', () => {
     });
 
     it('rejette en 400 un corps JSON syntaxiquement invalide, avant le contrôleur', async () => {
-      await post('{"entry":', 'sha256=00').expect(400);
+      await post('{"entry":"secret-du-corps', 'sha256=00').expect(400, {
+        statusCode: 400,
+        message: 'Corps de requête JSON invalide',
+        error: 'Bad Request',
+      });
 
       await expect(prisma.webhookLog.count()).resolves.toBe(0);
     });

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   computeTotal,
+  isTransactionConflict,
   normalizeCiPhone,
   OrderTotalExceededError,
   type PageResponse,
@@ -73,14 +74,6 @@ const NON_DIGITS = /\D/g;
 
 /** Nouvelles tentatives de `create` sans `tx` sur interblocage (P2034). */
 const CREATE_MAX_ATTEMPTS = 3;
-const PRISMA_TRANSACTION_CONFLICT = 'P2034';
-
-function isTransactionConflict(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === PRISMA_TRANSACTION_CONFLICT
-  );
-}
 
 // Prisma n'échappe pas les jokers LIKE sous MySQL (`\` : échappement par défaut).
 const LIKE_SPECIAL_CHARACTERS = /[\\%_]/g;

@@ -4,6 +4,7 @@ import { paginate, toSkipTake } from './paginate.js';
 import {
   DEFAULT_LIMIT,
   DEFAULT_PAGE,
+  MAX_PAGE,
   PaginationQueryDto,
 } from './pagination-query.dto.js';
 
@@ -28,12 +29,21 @@ describe('PaginationQueryDto', () => {
     expect(dto).toMatchObject({ page: 3, limit: 100 });
   });
 
+  it('accepte la page maximale (B-04)', () => {
+    const { dto, errors } = parse({ page: String(MAX_PAGE) });
+
+    expect(errors).toHaveLength(0);
+    expect(dto.page).toBe(MAX_PAGE);
+  });
+
   it.each([
     [{ limit: '101' }, 'limit'],
     [{ limit: '0' }, 'limit'],
     [{ page: '0' }, 'page'],
     [{ page: '1.5' }, 'page'],
     [{ page: 'abc' }, 'page'],
+    [{ page: String(MAX_PAGE + 1) }, 'page'],
+    [{ page: '999999999999999999999' }, 'page'],
   ])('refuse %o', (query, property) => {
     const { errors } = parse(query);
 

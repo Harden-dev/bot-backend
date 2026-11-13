@@ -47,10 +47,15 @@ export const envValidationSchema = Joi.object<Env, true>({
     .required(),
   JWT_SECRET: Joi.string().min(JWT_SECRET_MIN_LENGTH).required(),
   JWT_EXPIRES_IN: Joi.string().pattern(JWT_EXPIRES_IN_PATTERN).default('8h'),
+  // HTTPS obligatoire en production (B-06) : `otherwise` = NODE_ENV production.
   CORS_ORIGIN: Joi.string()
     .uri({ scheme: ['http', 'https'] })
     .pattern(ORIGIN_PATTERN)
-    .required(),
+    .required()
+    .when('NODE_ENV', {
+      not: 'production',
+      otherwise: Joi.string().uri({ scheme: ['https'] }),
+    }),
   META_APP_SECRET: Joi.string().required(),
   WEBHOOK_VERIFY_TOKEN: Joi.string().required(),
   WHATSAPP_TOKEN: Joi.string().required(),

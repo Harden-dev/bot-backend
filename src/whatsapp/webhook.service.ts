@@ -6,22 +6,31 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/index.js';
 import { MessageProcessor } from './message-processor.js';
 import { safeEqualStrings, verifyMetaSignature } from './meta-signature.js';
+import { UnsignedLogBudget } from './unsigned-log-budget.js';
 
 export const VERIFICATION_REFUSED_MESSAGE = 'Vérification du webhook refusée';
 export const INVALID_SIGNATURE_MESSAGE = 'Signature invalide';
 
 const SUBSCRIBE_MODE = 'subscribe';
 
-/** Taille maximale journalisée pour un POST non authentifié (signature invalide). */
-export const MAX_UNSIGNED_LOG_BYTES = 4_096;
-/** Aperçu conservé au-delà, en octets (marge pour l'échappement JSON). */
-export const UNSIGNED_LOG_PREVIEW_BYTES = 3_072;
+/** Aperçu conservé d'un POST non signé, en octets UTF-8 (H-01). */
+export const UNSIGNED_LOG_PREVIEW_BYTES = 256;
+
+/** Premiers octets du corps, sans dépasser la limite (caractère coupé retiré). */
+function preview(bytes: Buffer): string {
+  let text = bytes.subarray(0, UNSIGNED_LOG_PREVIEW_BYTES).toString('utf8');
+  while (Buffer.byteLength(text) > UNSIGNED_LOG_PREVIEW_BYTES) {
+    text = text.slice(0, -1);
+  }
+  return text;
+}
 
 /**
  * Payload écrit dans `webhook_logs`. Signature valide : tel quel. Signature
- * invalide (écriture sans authentification) : tel quel jusqu'à 4 ko, sinon
- * `{ truncated: true, size, preview }` (JSON valide, `size` en octets).
- * Corps absent ou non lu (type de contenu autre que JSON) : `{}`.
+ * absente ou invalide (écriture sans authentification) : jamais le contenu
+ * analysé, seulement `{ unsigned: true, size, preview }` (JSON valide sans
+ * imbrication ; `size` en octets, `preview` de 256 octets au plus). Corps non
+ * lu (type de contenu autre que JSON) : mesuré sur `{}`.
  */
 export function toLoggedPayload(
   payload: unknown,
@@ -33,14 +42,7 @@ export function toLoggedPayload(
     return value;
   }
   const bytes = rawBody ?? Buffer.from(JSON.stringify(value));
-  if (bytes.length <= MAX_UNSIGNED_LOG_BYTES) {
-    return value;
-  }
-  return {
-    truncated: true,
-    size: bytes.length,
-    preview: bytes.subarray(0, UNSIGNED_LOG_PREVIEW_BYTES).toString('utf8'),
-  };
+  return { unsigned: true, size: bytes.length, preview: preview(bytes) };
 }
 
 /** Paramètres `hub.*` de la vérification Meta, non typés à la réception. */
@@ -55,6 +57,9 @@ export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
   private readonly verifyToken: string;
   private readonly appSecret: string;
+  private readonly unsignedBudget = new UnsignedLogBudget((message) =>
+    this.logger.warn(message),
+  );
 
   constructor(
     private readonly prisma: PrismaService,
@@ -86,10 +91,11 @@ export class WebhookService {
   }
 
   /**
-   * POST signé : journalise le payload dans `webhook_logs` (validité de la
-   * signature comprise), refuse en 403 une signature absente ou fausse, sinon
-   * lance le traitement sans l'attendre. Un échec d'écriture du journal
-   * remonte (500) : Meta renverra l'événement.
+   * POST signé : journalise le payload complet dans `webhook_logs`, puis lance
+   * le traitement sans l'attendre. Un échec d'écriture du journal remonte
+   * (500) : Meta renverra l'événement. Signature absente ou fausse : aperçu
+   * seulement, dans la limite du plafond par minute (au-delà, rien n'est
+   * écrit en base), puis 403.
    */
   async receive(
     rawBody: Buffer | undefined,
@@ -101,20 +107,36 @@ export class WebhookService {
       signature,
       this.appSecret,
     );
-    await this.prisma.webhookLog.create({
-      data: {
-        signatureValid,
-        payload: toLoggedPayload(payload, rawBody, signatureValid),
-      },
-    });
     if (!signatureValid) {
-      this.logger.warn('Webhook refusé : signature absente ou invalide');
+      await this.logUnsigned(payload, rawBody);
       throw new ForbiddenException(INVALID_SIGNATURE_MESSAGE);
     }
+    await this.prisma.webhookLog.create({
+      data: {
+        signatureValid: true,
+        payload: toLoggedPayload(payload, rawBody, true),
+      },
+    });
     this.processor.process(payload).catch((error: unknown) => {
       this.logger.error(
         `Échec inattendu du traitement du webhook : ${describeError(error)}`,
       );
+    });
+  }
+
+  private async logUnsigned(
+    payload: unknown,
+    rawBody: Buffer | undefined,
+  ): Promise<void> {
+    if (!this.unsignedBudget.tryConsume(Date.now())) {
+      return;
+    }
+    this.logger.warn('Webhook refusé : signature absente ou invalide');
+    await this.prisma.webhookLog.create({
+      data: {
+        signatureValid: false,
+        payload: toLoggedPayload(payload, rawBody, false),
+      },
     });
   }
 }

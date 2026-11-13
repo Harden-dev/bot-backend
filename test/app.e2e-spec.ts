@@ -124,6 +124,45 @@ describe('Socle HTTP (e2e)', () => {
     expect(res.headers['x-powered-by']).toBeUndefined();
   });
 
+  it.each([
+    ['une réponse 200', '/api/v1/probe', 200],
+    ['une erreur 500', '/api/v1/probe/boom', 500],
+    ['une route inconnue (404)', '/api/v1/inexistante', 404],
+  ])(
+    'pose les en-têtes de sécurité sur %s (B-03)',
+    async (_label, path, status) => {
+      const res = await request(app.getHttpServer()).get(path).expect(status);
+
+      expect(res.headers).toMatchObject({
+        'x-content-type-options': 'nosniff',
+        'x-frame-options': 'DENY',
+        'referrer-policy': 'no-referrer',
+        'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
+      });
+    },
+  );
+
+  it('pose les en-têtes de sécurité sur une erreur de l’analyseur JSON (400 générique, I-04)', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/probe')
+      .set('Content-Type', 'application/json')
+      .send('{"name":"Awa 0707070707')
+      .expect(400, {
+        statusCode: 400,
+        message: 'Corps de requête JSON invalide',
+        error: 'Bad Request',
+      });
+
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+  });
+
+  it('ne pose pas la CSP sur l’interface Swagger (hors production)', async () => {
+    const res = await request(app.getHttpServer()).get('/api/docs').expect(200);
+
+    expect(res.headers['content-security-policy']).toBeUndefined();
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+  });
+
   it('masque le détail d’une erreur inattendue (500)', async () => {
     const res = await request(app.getHttpServer())
       .get('/api/v1/probe/boom')

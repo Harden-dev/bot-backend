@@ -64,30 +64,36 @@ describe('ReceiptsService', () => {
   });
 
   describe('format A5', () => {
-    it('génère un reçu PDF A5 nommé par la référence, au texte extractible', async () => {
-      orders.findOne.mockResolvedValue(order(7, 'CMD-20261110-003'));
-      const service = await createService('A5');
+    // Premier rendu pdfmake et première ouverture pdf.js du fichier : démarrage
+    // à froid, parfois plus de 5 s sous charge (QA-A1).
+    it(
+      'génère un reçu PDF A5 nommé par la référence, au texte extractible',
+      { timeout: 20_000 },
+      async () => {
+        orders.findOne.mockResolvedValue(order(7, 'CMD-20261110-003'));
+        const service = await createService('A5');
 
-      const receipt = await service.generateOne(7n);
-      const pdf = await readPdf(receipt.content);
+        const receipt = await service.generateOne(7n);
+        const pdf = await readPdf(receipt.content);
 
-      expect(orders.findOne).toHaveBeenCalledWith(7n);
-      expect(receipt.filename).toBe('CMD-20261110-003.pdf');
-      expect(pdf.header).toBe('%PDF-');
-      expect(pdf.pages).toHaveLength(1);
-      expect(pdf.pages[0]).toMatchObject(A5);
-      for (const expected of [
-        'Société Générale de Colis',
-        'CMD-20261110-003',
-        'Créée le 10/11/2026 à 14:05',
-        'Boutique Awa',
-        'Cocody Angré',
-        'Total : 15 000 F',
-        NOTES,
-      ]) {
-        expect(pdf.pages[0].text).toContain(expected);
-      }
-    });
+        expect(orders.findOne).toHaveBeenCalledWith(7n);
+        expect(receipt.filename).toBe('CMD-20261110-003.pdf');
+        expect(pdf.header).toBe('%PDF-');
+        expect(pdf.pages).toHaveLength(1);
+        expect(pdf.pages[0]).toMatchObject(A5);
+        for (const expected of [
+          'Société Générale de Colis',
+          'CMD-20261110-003',
+          'Créée le 10/11/2026 à 14:05',
+          'Boutique Awa',
+          'Cocody Angré',
+          'Total : 15 000 F',
+          NOTES,
+        ]) {
+          expect(pdf.pages[0].text).toContain(expected);
+        }
+      },
+    );
 
     it("propage le 404 d'une commande inconnue", async () => {
       orders.findOne.mockRejectedValue(new NotFoundException());
