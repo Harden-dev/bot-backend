@@ -1,0 +1,172 @@
+// Schéma de données : traduction fidèle du DAT, section 4 (9 tables).
+// Aucune table ni colonne ajoutée. Noms de tables et colonnes en snake_case
+// (@@map / @map), modèles en PascalCase, champs en camelCase.
+// L'URL de connexion est dans prisma.config.ts (Prisma 7).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ---------------------------------------------------------------------------
+// Énumérations (ENUM MySQL)
+// ---------------------------------------------------------------------------
+
+enum OrderStatus {
+  non_traitee
+  validee
+  prete
+  livree
+  echec
+  annulee
+}
+
+enum DraftStatus {
+  pending
+  confirmed
+  cancelled
+  expired
+}
+
+enum UserRole {
+  admin
+}
+
+// ---------------------------------------------------------------------------
+// Tables
+// ---------------------------------------------------------------------------
+
+model Vendor {
+  id             BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  name           String   @db.VarChar(120)
+  /// E.164 sans '+', ex. 2250707070707
+  whatsappNumber String   @unique(map: "whatsapp_number") @map("whatsapp_number") @db.VarChar(20)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  orders Order[]
+  drafts OrderDraft[]
+
+  @@map("vendors")
+}
+
+model User {
+  id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  name         String   @db.VarChar(120)
+  email        String   @unique(map: "email") @db.VarChar(190)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         UserRole @default(admin)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@map("users")
+}
+
+model Order {
+  id               BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  reference        String      @unique(map: "reference") @db.VarChar(24)
+  vendorId         BigInt      @map("vendor_id") @db.UnsignedBigInt
+  customerName     String      @map("customer_name") @db.VarChar(120)
+  /// 10 chiffres ivoiriens, ex. 0707070707
+  customerPhone    String      @map("customer_phone") @db.VarChar(20)
+  deliveryLocation String      @map("delivery_location") @db.VarChar(255)
+  notes            String?     @db.Text
+  status           OrderStatus @default(non_traitee)
+  /// XOF
+  totalAmount      Int         @default(0) @map("total_amount") @db.UnsignedInt
+  createdAt        DateTime    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime    @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  vendor        Vendor               @relation(fields: [vendorId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_orders_vendor")
+  items         OrderItem[]
+  statusHistory OrderStatusHistory[]
+
+  @@index([status], map: "idx_orders_status")
+  @@index([vendorId], map: "idx_orders_vendor")
+  @@index([createdAt], map: "idx_orders_created")
+  @@map("orders")
+}
+
+model OrderItem {
+  id        BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  orderId   BigInt @map("order_id") @db.UnsignedBigInt
+  label     String @db.VarChar(190)
+  quantity  Int    @db.UnsignedSmallInt
+  /// XOF
+  unitPrice Int    @map("unit_price") @db.UnsignedInt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_items_order")
+
+  // Pas d'index déclaré dans le DAT : MySQL crée automatiquement l'index
+  // de la clé étrangère (nommé fk_items_order). Le déclarer ici avec ce nom
+  // reproduit exactement ce que MySQL crée pour le DDL du DAT.
+  @@index([orderId], map: "fk_items_order")
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  orderId         BigInt   @map("order_id") @db.UnsignedBigInt
+  /// Valeur de OrderStatus (VARCHAR dans le DAT) ; NULL à la création
+  fromStatus      String?  @map("from_status") @db.VarChar(20)
+  toStatus        String   @map("to_status") @db.VarChar(20)
+  /// NULL = création par le bot (pas de clé étrangère dans le DAT)
+  changedByUserId BigInt?  @map("changed_by_user_id") @db.UnsignedBigInt
+  comment         String?  @db.VarChar(255)
+  changedAt       DateTime @default(now()) @map("changed_at") @db.DateTime(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_hist_order")
+
+  @@index([orderId], map: "idx_hist_order")
+  @@map("order_status_history")
+}
+
+model OrderDraft {
+  id        BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  /// Inclus dans l'id des boutons WhatsApp
+  publicId  String      @unique(map: "public_id") @map("public_id") @db.Char(12)
+  vendorId  BigInt      @map("vendor_id") @db.UnsignedBigInt
+  /// Nom, téléphone, lieu, articles parsés, total (+ orderReference à la confirmation, PO-11)
+  payload   Json
+  status    DraftStatus @default(pending)
+  createdAt DateTime    @default(now()) @map("created_at") @db.DateTime(3)
+  expiresAt DateTime    @map("expires_at") @db.DateTime(3)
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_drafts_vendor")
+
+  @@index([vendorId], map: "idx_drafts_vendor")
+  @@index([expiresAt], map: "idx_drafts_expires")
+  @@map("order_drafts")
+}
+
+model DailyCounter {
+  day     DateTime @id @db.Date
+  lastSeq Int      @default(0) @map("last_seq") @db.UnsignedInt
+
+  @@map("daily_counters")
+}
+
+model ProcessedMessage {
+  id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  wamid      String   @unique(map: "wamid") @db.VarChar(120)
+  receivedAt DateTime @default(now()) @map("received_at") @db.DateTime(3)
+
+  @@map("processed_messages")
+}
+
+model WebhookLog {
+  id             BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  signatureValid Boolean  @map("signature_valid")
+  payload        Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([createdAt], map: "idx_logs_created")
+  @@map("webhook_logs")
+}
