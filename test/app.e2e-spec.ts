@@ -13,12 +13,15 @@ import type { Request } from 'express';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/app.setup.js';
+import { Public } from '../src/common/index.js';
 
 class ProbeDto {
   @IsString()
   name: string;
 }
 
+// Contrôleur de test du socle HTTP : public pour ne pas dépendre du JWT.
+@Public()
 @Controller('probe')
 class ProbeController {
   @Get()

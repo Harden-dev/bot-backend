@@ -76,6 +76,8 @@ describe('envValidationSchema', () => {
     ['RECEIPT_FORMAT', 'A4'],
     ['DRAFT_TTL_MINUTES', '0'],
     ['PORT', 'abc'],
+    ['JWT_EXPIRES_IN', '28800'],
+    ['JWT_EXPIRES_IN', 'abc'],
   ])('refuse une valeur invalide pour %s', (key, value) => {
     const { error } = validate({ ...VALID_ENV, [key]: value });
 
@@ -83,6 +85,14 @@ describe('envValidationSchema', () => {
       error?.details.map((detail) => detail.context?.key),
     );
     expect([...invalidKeys]).toEqual([key]);
+  });
+});
+
+describe('envValidationSchema : JWT_EXPIRES_IN', () => {
+  it.each(['8h', '30m', '3600s', '1d'])('accepte la durée %s', (duration) => {
+    expect(
+      validate({ ...VALID_ENV, JWT_EXPIRES_IN: duration }).error,
+    ).toBeUndefined();
   });
 });
 

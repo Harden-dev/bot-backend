@@ -1,7 +1,7 @@
 # Plan de tâches
 
 Référence : `docs/01-architecture.md` (conventions obligatoires), `docs/00-specs.md`, DAT section 9. Règle : une étape à la fois ; à la fin de l'étape, tests lancés (`pnpm test`, `pnpm lint`, `pnpm build`, e2e si prévus), puis arrêt pour validation avant l'étape suivante. Aucune fonctionnalité hors section 1 du DAT.
-Statut possible : à faire / en cours / terminé. Étape 1 : BE-001, BE-002 et BE-004 **terminés** (lancement A) ; DB-001 **terminé** (lancement B, migration appliquée sur `commandes` et `commandes_test`) ; BE-003, BE-005 et BE-006 **terminés** (lancement C, notes N-14 à N-18). Étape 1 revue ; corrections de la revue appliquées (N-19, N-20), en attente de validation ; les tâches des étapes suivantes sont **à faire**.
+Statut possible : à faire / en cours / terminé. Étape 1 : BE-001, BE-002 et BE-004 **terminés** (lancement A) ; DB-001 **terminé** (lancement B, migration appliquée sur `commandes` et `commandes_test`) ; BE-003, BE-005 et BE-006 **terminés** (lancement C, notes N-14 à N-18). Étape 1 revue ; corrections de la revue appliquées (N-19, N-20), validée et commitée (`056a4f6`). Étape 2 : BE-010 à BE-013 **terminés** (notes N-21 à N-26), revus (GO avec corrections, appliquées : N-27), en attente de validation ; les tâches des étapes suivantes sont **à faire**.
 Agents utilisés : backend-builder (BB), db-architect (DB), code-reviewer (CR), qa-analyst (QA), pentester-security (PEN), devops-sre (OPS). Pas de ux-ui-designer, frontend-builder ni ai-engineer (frontend dans un dépôt séparé).
 
 Ajustement par rapport au plan de l'architecture : DB-001 dépend de BE-001 (Prisma doit être installé pour valider le schéma et générer la migration).
@@ -75,10 +75,31 @@ Terminé quand : toute route hors login, webhook et health répond 401 sans jeto
 
 | ID | Titre | Agent | Dépend de | Fichiers | Validation | Statut |
 | --- | --- | --- | --- | --- | --- | --- |
-| BE-010 | Module `users` (lecture) | BB | BE-003 | `src/users/*` | Tests unitaires | à faire |
-| BE-011 | `auth` : login, `me`, stratégie JWT, `JwtAuthGuard` global, `@Public()`, `@CurrentUser()` | BB | BE-010 | `src/auth/*`, `src/common/guards/*`, `src/common/decorators/*` | 401 sans jeton ; compte inactif 401 ; hachage argon2 | à faire |
-| BE-012 | `normalizeVendorNumber`, `normalizeCiPhone` (pures) | BB | BE-004 | `src/common/phone/*` | Tests, 100 % des branches | à faire |
-| BE-013 | Module `vendors` (GET/POST/PATCH, 409 doublon, `findActiveByWhatsappNumber`) | BB | BE-011, BE-012 | `src/vendors/*` | Tests unitaires et e2e | à faire |
+| BE-010 | Module `users` (lecture) | BB | BE-003 | `src/users/*` | Tests unitaires | terminé (N-21) |
+| BE-011 | `auth` : login, `me`, stratégie JWT, `JwtAuthGuard` global, `@Public()`, `@CurrentUser()` | BB | BE-010 | `src/auth/*`, `src/common/guards/*`, `src/common/decorators/*` | 401 sans jeton ; compte inactif 401 ; hachage argon2 | terminé (N-22, N-23) |
+| BE-012 | `normalizeVendorNumber`, `normalizeCiPhone` (pures) | BB | BE-004 | `src/common/phone/*` | Tests, 100 % des branches | terminé (N-24) |
+| BE-013 | Module `vendors` (GET/POST/PATCH, 409 doublon, `findActiveByWhatsappNumber`) | BB | BE-011, BE-012 | `src/vendors/*` | Tests unitaires et e2e | terminé (N-25) |
+
+### Notes de l'étape 2 (backend-builder)
+
+- **N-21 BE-010** : `src/users/` (`UsersService.findById` / `findByEmail`, `UserResponseDto` + `toUserResponse` : `id` en `number`, `email`, `name`, `role`, jamais `passwordHash`). Lecture seule : aucune route `users`, aucune inscription.
+- **N-22 BE-011** : `src/auth/` (`AuthService`, `JwtStrategy`, `AuthController`, `LoginDto`, `LoginResponseDto`), `src/common/guards/jwt-auth.guard.ts`, `src/common/decorators/current-user.decorator.ts`. `POST /api/v1/auth/login` (`@Public()`, **200** et non 201) → `{ accessToken, user }` ; JWT HS256 (algorithme imposé à la signature et à la vérification, `alg: none` refusé), `sub` = id utilisateur en chaîne, durée `JWT_EXPIRES_IN` (8 h par défaut). `GET /api/v1/auth/me` → `UserResponseDto`. `JwtAuthGuard` en `APP_GUARD` dans `AppModule` ; `@Public()` déjà posé sur `/health`. PO-17 : e-mail inconnu, mot de passe faux ou compte inactif → même `401` « E-mail ou mot de passe incorrect » ; la stratégie recharge l'utilisateur à chaque requête et refuse un compte supprimé, inactif ou non `admin` (`401` « Authentification requise », même message que jeton absent, invalide ou expiré). Une erreur non HTTP de la stratégie (base indisponible) n'est pas convertie en 401 : elle remonte au filtre (500). Throttler (BE-060) et Swagger (BE-061) non branchés (étape 7). `test/app.e2e-spec.ts` : contrôleur de test passé en `@Public()` (sinon 401 depuis la garde globale).
+- **N-23 Choix non spécifiés (à valider)** : (1) pas d'égalisation du temps de réponse entre e-mail inconnu (pas de calcul argon2) et mot de passe faux : énumération d'e-mail possible par mesure de temps, atténuée par le throttler de BE-060 (compte admin unique) ; (2) aucune longueur maximale sur `password` à la connexion (corps limité à 256 ko ; argon2 prend toute longueur) ; (3) `JWT_EXPIRES_IN` n'est validé par Joi que comme chaîne : une valeur hors format `ms` ferait échouer la signature au login (module `config`, hors étape 2).
+- **N-24 BE-012** : `src/common/phone/normalize-phone.ts`. `normalizeCiPhone` (R-P3) : retire espaces (dont insécables et tabulations), points et tirets, puis `+225`, `00225` ou `225` **seulement s'ils précèdent exactement 10 chiffres** (une saisie locale à 10 chiffres commençant par 225 reste locale) ; renvoie 10 chiffres ou `null`. `normalizeVendorNumber` (PO-15) = `'225' + normalizeCiPhone(...)`, ou `null`. Écart d'interprétation assumé : un `+` n'est accepté que suivi de `225` (`+0707070707` refusé). 100 % des instructions et branches couvertes. `ParseIdPipe` ajouté dans `src/common/pipes/` (entier > 0 et ≤ 2^53 - 1, converti en `bigint`, sinon `400` « Identifiant invalide ») : remplace `ParseIntPipe` qui accepte 0, les négatifs et perd la précision au-delà de 2^53 ; réutilisable par `orders` et `receipts`.
+- **N-25 BE-013** : `src/vendors/`. `GET /api/v1/vendors` : tous les vendeurs, triés par nom croissant (ordre non spécifié), sans pagination (PO-21). `POST` : `name` (rogné, 1 à 120 caractères), `whatsappNumber` normalisé dans le DTO (`@Transform` puis `@Matches(/^225d{10}$/)`, sinon `400`) ; créé actif ; `201`. `PATCH /:id` : `name`, `whatsappNumber`, `isActive` facultatifs, `null` refusé en `400` (`PartialType(..., { skipNullProperties: false })`), `isActive` booléen JSON strict ; vendeur inconnu `404` « Vendeur introuvable ». Doublon (création ou modification) : `P2002` → `409` « Ce numéro WhatsApp est déjà attribué à un vendeur » (PO-16). Aucune route `DELETE` (404 vérifié). `findActiveByWhatsappNumber(number)` exporté par `src/vendors/index.ts` pour le bot : normalise l'entrée (le `from` Meta est déjà en E.164 sans `+`), renvoie l'entité Prisma `Vendor` actif ou `null` (sans requête si le numéro n'est pas ivoirien). Réponses `VendorResponseDto` (`id` via `toNumberId`, dates ISO).
+- **N-26 Tests** : unitaires `normalize-phone`, `parse-id.pipe`, `jwt-auth.guard`, `users.service`, `auth.service`, `vendors.service` ; e2e `test/auth.e2e-spec.ts` (login OK/KO, compte inactif, JWT HS256 de 8 h, `me`, 401 sans jeton, jeton mal formé, autre clé, `alg: none`, expiré, compte désactivé après émission ; 401 sur les routes vendeurs ; `/health` public ; pas de route d'inscription) et `test/vendors.e2e-spec.ts` (création normalisée, doublon 409, 400 de validation, liste, modification, désactivation/réactivation avec `findActiveByWhatsappNumber`, 404, ids invalides, pas de DELETE). Helper `test/helpers/create-app.ts` (application complète + admin de test via `seedAdmin` + jeton).
+
+### Note de suivi : corrections revue étape 2 (backend-builder)
+
+- **N-27 Corrections appliquées** (points de revue 1, 2, 3, 4, 7, 8, 11, 12 ; les points 5, 9 et 10 ne sont pas traités, le point 5, le `+` de `normalizeVendorNumber`, est soumis au client) :
+  1. `src/config/env.validation.ts` : `JWT_EXPIRES_IN` doit respecter `/^d+(ms|s|m|h|d)$/` (défaut `8h`). Un nombre seul (`28800`) est refusé, car `ms` le lirait en millisecondes (jeton de 29 s). Tests : `28800` et `abc` refusés, `8h`, `30m`, `3600s`, `1d` acceptés. `.env.test` reste valide (démarrage des e2e OK). Correction de N-23 (3).
+  2. `AuthService.login` : argon2 `verify` est toujours exécuté, sur un hachage factice (argon2id d'un aléa, calculé une fois au chargement du module) quand l'e-mail est inconnu. Les temps de réponse sont ainsi égalisés et N-23 (1) est levé. Test : `verify` appelé quand l'e-mail est inconnu.
+  3. `LoginDto.password` : `@MaxLength(256)`. Correction de N-23 (2).
+  4. Si `verify` lève (hachage mal formé en base), l'erreur est journalisée en `warn`, sans mot de passe, et traitée comme un mot de passe faux (`401`, pas `500`). Test unitaire.
+  7. E2E : un jeton signé en HS512 avec la bonne clé est refusé en `401`. Contrôle de mutation : le test échoue sans `algorithms` dans `jwt.strategy.ts` (option remise).
+  8. `VendorsService.findAll` : tri `[{ name: 'asc' }, { id: 'asc' }]` (ordre stable à nom égal).
+  11. `LoginResponseDto.accessToken` : description « durée JWT_EXPIRES_IN (8 h par défaut) ».
+  12. `LoginDto.email` : espaces de début et de fin retirés (`@Transform`) avant `@IsEmail`.
 
 ## Étape 3 : Commandes
 Terminé quand : chaque transition autorisée et les refus de US-CMD-06 sont testés (409, historique inchangé) ; deux créations simultanées donnent deux références distinctes ; filtres, pagination (`limit > 100` en 400), compteurs corrects ; correction refusée hors `non_traitee`/`validee` ; champs non autorisés refusés.
@@ -149,7 +170,7 @@ Terminé quand : un vrai message WhatsApp depuis un destinataire autorisé crée
 
 ## Prochaine action
 
-Lancements A, B et C de l'étape 1 réalisés. **Action suivante : revue de l'étape 1 (code-reviewer), puis arrêt pour validation avant l'étape 2.** Historique ci-dessous.
+Étape 2 (Accès) réalisée (BE-010 à BE-013, notes N-21 à N-26). **Action suivante : revue de l'étape 2 (code-reviewer), validation des choix restants de N-24 (dont le `+`, point soumis au client) et de N-25, puis arrêt pour validation avant l'étape 3.** Historique de l'étape 1 ci-dessous.
 
 **Agent désigné pour démarrer l'étape 1 : backend-builder**, en premier lancement, puis db-architect, puis un second lancement de backend-builder. Le projet n'a pas de tâche UX.
 

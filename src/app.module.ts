@@ -1,11 +1,17 @@
 import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { APP_FILTER, APP_PIPE } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
-import { AllExceptionsFilter, buildPinoHttpOptions } from './common/index.js';
+import { AuthModule } from './auth/index.js';
+import {
+  AllExceptionsFilter,
+  buildPinoHttpOptions,
+  JwtAuthGuard,
+} from './common/index.js';
 import { AppConfigModule, type Env } from './config/index.js';
 import { HealthModule } from './health/index.js';
 import { PrismaModule } from './prisma/index.js';
+import { VendorsModule } from './vendors/index.js';
 
 @Module({
   imports: [
@@ -18,6 +24,8 @@ import { PrismaModule } from './prisma/index.js';
     }),
     PrismaModule,
     HealthModule,
+    AuthModule,
+    VendorsModule,
   ],
   providers: [
     {
@@ -29,6 +37,7 @@ import { PrismaModule } from './prisma/index.js';
       }),
     },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })
 export class AppModule {}

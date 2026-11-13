@@ -32,6 +32,9 @@ const JWT_SECRET_MIN_LENGTH = 32;
 const ADMIN_PASSWORD_MIN_LENGTH = 12;
 // Origine CORS : schéma et hôte (port facultatif), sans chemin ni « / » final.
 const ORIGIN_PATTERN = /^https?:\/\/[^/]+$/;
+// Durée JWT au format `ms` avec unité obligatoire : un nombre seul serait lu
+// en millisecondes (`28800` = jeton de 29 s).
+const JWT_EXPIRES_IN_PATTERN = /^\d+(ms|s|m|h|d)$/;
 
 export const envValidationSchema = Joi.object<Env, true>({
   NODE_ENV: Joi.string()
@@ -43,7 +46,7 @@ export const envValidationSchema = Joi.object<Env, true>({
     .uri({ scheme: ['mysql'] })
     .required(),
   JWT_SECRET: Joi.string().min(JWT_SECRET_MIN_LENGTH).required(),
-  JWT_EXPIRES_IN: Joi.string().default('8h'),
+  JWT_EXPIRES_IN: Joi.string().pattern(JWT_EXPIRES_IN_PATTERN).default('8h'),
   CORS_ORIGIN: Joi.string()
     .uri({ scheme: ['http', 'https'] })
     .pattern(ORIGIN_PATTERN)
