@@ -218,6 +218,7 @@ describe('Orders (e2e)', () => {
 
     it('s’annule avec la transaction de l’appelant (commande et compteur)', async () => {
       const rollback = new Error('annulation volontaire');
+      await orders.prepareDailyCounter();
 
       await expect(
         prisma.$transaction(async (tx) => {
@@ -232,6 +233,7 @@ describe('Orders (e2e)', () => {
     });
 
     it('n’interbloque pas les créations en attente quand la première du jour est annulée', async () => {
+      await orders.prepareDailyCounter();
       const first = await holdTransaction((tx) => orders.create(input(), tx), {
         rollback: true,
       });

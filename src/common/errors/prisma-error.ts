@@ -1,5 +1,7 @@
 export const PRISMA_UNIQUE_VIOLATION = 'P2002';
 export const PRISMA_RECORD_NOT_FOUND = 'P2025';
+/** Conflit d'écriture ou interblocage : la transaction est à relancer. */
+export const PRISMA_TRANSACTION_CONFLICT = 'P2034';
 
 const PRISMA_KNOWN_ERROR_NAME = 'PrismaClientKnownRequestError';
 const PRISMA_ERROR_NAME_PREFIX = 'PrismaClient';
@@ -31,6 +33,13 @@ export function isPrismaKnownError(error: unknown): error is PrismaKnownError {
 /** Violation d'unicité (`P2002`). */
 export function isUniqueViolation(error: unknown): boolean {
   return isPrismaKnownError(error) && error.code === PRISMA_UNIQUE_VIOLATION;
+}
+
+/** Conflit de transaction (`P2034`, interblocage MySQL). */
+export function isTransactionConflict(error: unknown): boolean {
+  return (
+    isPrismaKnownError(error) && error.code === PRISMA_TRANSACTION_CONFLICT
+  );
 }
 
 /**

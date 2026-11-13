@@ -4,11 +4,8 @@ import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/index.js';
 import { WhatsappClient } from './client/index.js';
 import { type IncomingMessage, MESSAGE_HANDLER } from './contracts.js';
-import {
-  MessageProcessor,
-  PROCESSING_ERROR_MESSAGE,
-  SHUTDOWN_TIMEOUT_MS,
-} from './message-processor.js';
+import { PROCESSING_ERROR_MESSAGE } from '../bot/index.js';
+import { MessageProcessor, SHUTDOWN_TIMEOUT_MS } from './message-processor.js';
 
 const FROM = '2250707070707';
 const OTHER = '2250505050505';

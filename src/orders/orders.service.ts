@@ -155,12 +155,16 @@ export class OrdersService {
    * écriture.
    *
    * La ligne `daily_counters` du jour est d'abord créée hors transaction
-   * (autocommit, sans attente de verrou), puis incrémentée sous verrou de
-   * ligne dans la transaction : une transaction annulée ne peut pas provoquer
-   * d'interblocage sur la première commande du jour.
+   * (autocommit, sans attente de verrou, `prepareDailyCounter`), puis
+   * incrémentée sous verrou de ligne dans la transaction : une transaction
+   * annulée ne peut pas provoquer d'interblocage sur la première commande du
+   * jour.
    *
-   * Sans `tx` : transaction propre, relancée jusqu'à 3 fois sur conflit
-   * (`P2034`). Avec `tx` (transaction de l'appelant, ex. le bot) :
+   * Sans `tx` : ligne du jour préparée, puis transaction propre, relancée
+   * jusqu'à 3 fois sur conflit (`P2034`). Avec `tx` (transaction de
+   * l'appelant, ex. le bot), `create` n'utilise que `tx` :
+   * - l'appelant appelle `prepareDailyCounter()` **avant** d'ouvrir sa
+   *   transaction (sinon : erreur « Compteur journalier absent ») ;
    * - l'appelant relance lui-même toute sa transaction sur `P2034` ;
    * - `create` doit être le dernier appel de la transaction (le verrou du
    *   compteur bloque les autres créations jusqu'au COMMIT) ;
@@ -172,12 +176,12 @@ export class OrdersService {
     const totalAmount = computeTotal(input.items);
     const now = new Date();
     const day = toUtcDay(now);
-    await this.ensureDailyCounter(day);
     const insert = (client: PrismaTx) =>
       this.insertOrder(client, input, { totalAmount, now, day });
     if (tx) {
       return insert(tx);
     }
+    await this.ensureDailyCounter(day);
     for (let attempt = 1; ; attempt += 1) {
       try {
         return await this.prisma.$transaction(insert);
@@ -187,6 +191,15 @@ export class OrdersService {
         }
       }
     }
+  }
+
+  /**
+   * Crée la ligne `daily_counters` du jour UTC si elle manque, en autocommit
+   * sur la connexion du service. À appeler avant d'ouvrir une transaction qui
+   * passera son `tx` à `create`.
+   */
+  prepareDailyCounter(now: Date = new Date()): Promise<void> {
+    return this.ensureDailyCounter(toUtcDay(now));
   }
 
   async findAll(
@@ -218,6 +231,19 @@ export class OrdersService {
       counts[group.status] = group._count._all;
     }
     return counts;
+  }
+
+  /** Dernières commandes d'un vendeur (plus récente d'abord), pour le bot. */
+  findRecentByVendor(
+    vendorId: bigint,
+    take: number,
+  ): Promise<Pick<Order, 'reference' | 'status' | 'totalAmount'>[]> {
+    return this.prisma.order.findMany({
+      where: { vendorId },
+      select: { reference: true, status: true, totalAmount: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take,
+    });
   }
 
   async findOne(id: bigint): Promise<OrderDetailDto> {

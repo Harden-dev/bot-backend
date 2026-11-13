@@ -3,8 +3,10 @@ export { IS_PUBLIC_KEY, Public } from './decorators/public.decorator.js';
 export {
   describeError,
   isPrismaKnownError,
+  isTransactionConflict,
   isUniqueViolation,
   PRISMA_RECORD_NOT_FOUND,
+  PRISMA_TRANSACTION_CONFLICT,
   PRISMA_UNIQUE_VIOLATION,
 } from './errors/prisma-error.js';
 export type { PrismaKnownError } from './errors/prisma-error.js';
@@ -35,5 +37,7 @@ export {
   OrderTotalExceededError,
 } from './money/compute-total.js';
 export type { PricedItem } from './money/compute-total.js';
+export { formatThousands, formatXof } from './money/format-xof.js';
 export { INVALID_PERIOD_MESSAGE, toDayRange } from './period/day-range.js';
 export type { DayRange } from './period/day-range.js';
+export { foldCase, normalizeForMatch } from './text/normalize-for-match.js';

@@ -4,6 +4,7 @@ import {
   Logger,
   type OnModuleDestroy,
 } from '@nestjs/common';
+import { PROCESSING_ERROR_MESSAGE } from '../bot/index.js';
 import {
   describeError,
   isUniqueViolation,
@@ -17,10 +18,6 @@ import {
   type MessageHandler,
 } from './contracts.js';
 import { extractMessages } from './normalize-messages.js';
-
-/** Envoyé au vendeur quand le traitement de son message échoue (PO-24). */
-export const PROCESSING_ERROR_MESSAGE =
-  'Une erreur est survenue, veuillez renvoyer votre message.';
 
 /** Attente maximale des traitements en cours à l'arrêt de l'application. */
 export const SHUTDOWN_TIMEOUT_MS = 10_000;

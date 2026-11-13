@@ -6,10 +6,8 @@ import type { Env } from '../src/config/index.js';
 import { PrismaService } from '../src/prisma/index.js';
 import { WhatsappClient } from '../src/whatsapp/client/index.js';
 import { MESSAGE_HANDLER } from '../src/whatsapp/index.js';
-import {
-  MessageProcessor,
-  PROCESSING_ERROR_MESSAGE,
-} from '../src/whatsapp/message-processor.js';
+import { PROCESSING_ERROR_MESSAGE } from '../src/bot/index.js';
+import { MessageProcessor } from '../src/whatsapp/message-processor.js';
 import { WebhookLogsCleanup } from '../src/whatsapp/webhook-logs.cleanup.js';
 import { createApp } from './helpers/create-app.js';
 import { resetDb } from './helpers/reset-db.js';

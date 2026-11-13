@@ -173,7 +173,7 @@ describe('OrdersService', () => {
     it('crée la ligne du jour hors transaction si elle manque', async () => {
       prisma.$queryRaw.mockResolvedValue([]);
 
-      await service.create(INPUT, tx as never);
+      await service.create(INPUT);
 
       expect(sql(prisma.$executeRaw)).toContain(
         'INSERT IGNORE INTO daily_counters (day, last_seq) VALUES (?, 0)',
@@ -182,6 +182,24 @@ describe('OrdersService', () => {
       expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
         tx.$executeRaw.mock.invocationCallOrder[0],
       );
+    });
+
+    it('avec tx, n’utilise pas la connexion du service (ligne du jour préparée par l’appelant)', async () => {
+      await service.create(INPUT, tx as never);
+
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    });
+
+    it('prepareDailyCounter crée la ligne du jour si elle manque, rien sinon', async () => {
+      prisma.$queryRaw.mockResolvedValueOnce([]);
+      await service.prepareDailyCounter(new Date('2026-11-11T23:59:59.999Z'));
+      expect(prisma.$executeRaw).toHaveBeenCalledOnce();
+      expect(prisma.$executeRaw.mock.calls[0][1]).toBe('2026-11-11');
+
+      await service.prepareDailyCounter();
+      expect(prisma.$executeRaw).toHaveBeenCalledOnce();
+      expect(prisma.$queryRaw.mock.calls[1][1]).toBe('2026-11-10');
     });
 
     it('échoue si la ligne du compteur est absente dans la transaction', async () => {
@@ -379,6 +397,21 @@ describe('OrdersService', () => {
       livree: 2,
       echec: 0,
       annulee: 0,
+    });
+  });
+
+  it('renvoie les dernières commandes du vendeur, plus récente d’abord', async () => {
+    const recent = [
+      { reference: 'CMD-20261110-003', status: 'validee', totalAmount: 38_000 },
+    ];
+    order.findMany.mockResolvedValue(recent);
+
+    await expect(service.findRecentByVendor(2n, 5)).resolves.toBe(recent);
+    expect(order.findMany).toHaveBeenCalledWith({
+      where: { vendorId: 2n },
+      select: { reference: true, status: true, totalAmount: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 5,
     });
   });
 
